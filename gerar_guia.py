@@ -142,8 +142,11 @@ E.append(bullets([
     "A <b>Project URL</b> e o endereco do seu projeto: <font name='Courier'>https://SEU_ID.supabase.co</font> "
     "(o SEU_ID aparece no endereco do painel; confirme tambem em Settings &gt; General).",
 ]))
-E.append(note("info", "Login sem confirmar e-mail (opcional)",
-    "Em Authentication &gt; Providers &gt; Email voce pode desativar 'Confirm email' para entrar direto apos criar a conta."))
+E.append(note("warn", "Login so com e-mail - ative isto no Supabase",
+    "O app entra so com o e-mail (sem senha). Para isso, DESLIGUE a confirmacao de e-mail: "
+    "menu Authentication (barra lateral) &gt; Sign In / Providers &gt; Email &gt; desative 'Confirm email' &gt; Save. "
+    "Em algumas contas aparece em Authentication &gt; Emails/Settings como 'Enable email confirmations'. "
+    "Sem isso, o primeiro acesso fica preso esperando confirmacao."))
 
 # ---- Passo 2 ----
 E.append(step_header(2, "Preencher o arquivo config.js"))
@@ -185,7 +188,7 @@ E.append(bullets([
     "<b>Android (Chrome):</b> menu (tres pontos) &gt; <b>Instalar app</b> / Adicionar a tela inicial.",
     "<b>iPhone (Safari):</b> botao Compartilhar &gt; <b>Adicionar a Tela de Inicio</b>.",
     "<b>Computador (Chrome/Edge):</b> icone de instalar na barra de endereco.",
-    "Na primeira tela, clique em <b>Criar conta</b>, defina e-mail e senha, e comece a usar.",
+    "Na primeira tela, digite seu e-mail e clique em <b>Entrar</b>. Pronto - sem senha. A sessao fica salva no aparelho.",
 ]))
 
 # ---- Extra: cotacoes ----

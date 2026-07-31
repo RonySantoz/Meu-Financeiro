@@ -48,27 +48,45 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 });
 
-/* ---------------- Auth ---------------- */
-async function doLogin() {
-  const email = $("#auth-email").value.trim();
-  const password = $("#auth-pass").value;
-  if (!email || !password) return ($("#auth-msg").textContent = "Preencha e-mail e senha.");
-  const { error } = await sb.auth.signInWithPassword({ email, password });
-  if (error) $("#auth-msg").textContent = traduzErro(error.message);
+/* ---------------- Auth (só e-mail, sem senha) ----------------
+   A senha é derivada do e-mail no navegador (SHA-256 + APP_SECRET).
+   O usuário só digita o e-mail. Requer "Confirm email" DESLIGADO no Supabase. */
+async function derivarSenha(email) {
+  const base = (window.APP_SECRET || "financas-app") + "|" + email.trim().toLowerCase();
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(base));
+  const hex = [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  return "Aa1!" + hex.slice(0, 28); // prefixo garante complexidade mínima
 }
-async function doSignup() {
+async function entrarComEmail() {
   const email = $("#auth-email").value.trim();
-  const password = $("#auth-pass").value;
-  if (!email || password.length < 6) return ($("#auth-msg").textContent = "Senha precisa de ao menos 6 caracteres.");
-  const { error } = await sb.auth.signUp({ email, password });
-  if (error) return ($("#auth-msg").textContent = traduzErro(error.message));
-  $("#auth-msg").style.color = "var(--pos)";
-  $("#auth-msg").textContent = "Conta criada! Confirme o e-mail (se exigido) e clique em Entrar.";
+  if (!email || !email.includes("@")) { $("#auth-msg").style.color = "var(--neg)"; $("#auth-msg").textContent = "Digite um e-mail válido."; return; }
+  const btn = $("#btn-entrar"); btn.disabled = true; btn.textContent = "Entrando...";
+  $("#auth-msg").style.color = "var(--muted)"; $("#auth-msg").textContent = "";
+  try {
+    const password = await derivarSenha(email);
+    // 1) tenta entrar
+    let { error } = await sb.auth.signInWithPassword({ email, password });
+    if (!error) return; // sucesso -> onAuthStateChange abre o app
+    // 2) primeiro acesso: cria a conta
+    if (/invalid login/i.test(error.message)) {
+      const { data: su, error: e2 } = await sb.auth.signUp({ email, password });
+      if (e2) { $("#auth-msg").style.color = "var(--neg)"; $("#auth-msg").textContent = traduzErro(e2.message); return; }
+      if (su && su.session) return; // já logou (confirmação desligada)
+      // 3) sem sessão -> tenta login logo após criar
+      const { error: e3 } = await sb.auth.signInWithPassword({ email, password });
+      if (e3) { $("#auth-msg").style.color = "var(--neg)"; $("#auth-msg").textContent = traduzErro(e3.message); return; }
+      return;
+    }
+    $("#auth-msg").style.color = "var(--neg)"; $("#auth-msg").textContent = traduzErro(error.message);
+  } finally {
+    btn.disabled = false; btn.textContent = "Entrar";
+  }
 }
 function traduzErro(m = "") {
-  if (/invalid login/i.test(m)) return "E-mail ou senha inválidos.";
-  if (/already registered/i.test(m)) return "E-mail já cadastrado. Clique em Entrar.";
-  if (/email not confirmed/i.test(m)) return "Confirme seu e-mail antes de entrar.";
+  if (/email not confirmed|confirm/i.test(m))
+    return "Desative 'Confirm email' no Supabase (Authentication > Sign In/Providers > Email) para entrar só com o e-mail.";
+  if (/rate limit|too many/i.test(m)) return "Muitas tentativas. Aguarde alguns minutos.";
+  if (/signups not allowed/i.test(m)) return "Cadastro desativado no Supabase. Ative em Authentication > Providers > Email.";
   return m;
 }
 
@@ -644,9 +662,8 @@ function exportarJSON() {
 
 /* ---------------- Wiring de eventos ---------------- */
 function wireUI() {
-  $("#btn-login").addEventListener("click", doLogin);
-  $("#btn-signup").addEventListener("click", doSignup);
-  $("#auth-pass").addEventListener("keydown", (e) => { if (e.key === "Enter") doLogin(); });
+  $("#btn-entrar").addEventListener("click", entrarComEmail);
+  $("#auth-email").addEventListener("keydown", (e) => { if (e.key === "Enter") entrarComEmail(); });
   $("#btn-logout").addEventListener("click", () => sb.auth.signOut());
 
   // tabs

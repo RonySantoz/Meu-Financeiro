@@ -12,6 +12,14 @@ window.SUPABASE_URL = "https://mgrdppjivibwlwwmbhyr.supabase.co";
 window.SUPABASE_ANON_KEY = "sb_publishable_EJ3RfSwrgSiUASm8jum0uQ_AsBBUsGK";
 
 // ------------------------------------------------------------
+//  LOGIN SÓ COM E-MAIL
+//  A senha é gerada a partir do seu e-mail + esta frase secreta.
+//  Troque por uma frase qualquer (quanto mais longa/aleatória, melhor).
+//  Não mude depois de começar a usar, senão o login muda.
+// ------------------------------------------------------------
+window.APP_SECRET = "Aadreamer1@";
+
+// ------------------------------------------------------------
 //  COTAÇÕES (opcional)
 //  Ações/FIIs brasileiros usam a API gratuita brapi.dev.
 //  O plano gratuito pode pedir um token. Crie um grátis em
