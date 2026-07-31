@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#111827" />
+  <title>Minhas Finanças</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- ===== Tela de Login ===== -->
+  <div id="auth-view" class="auth-wrap hidden">
+    <div class="auth-card">
+      <div class="brand"><span class="logo">₿</span><h1>Minhas Finanças</h1></div>
+      <p class="muted">Controle de contas, faturas e investimentos.</p>
+      <input id="auth-email" type="email" placeholder="seu@email.com" autocomplete="email" />
+      <input id="auth-pass" type="password" placeholder="Senha (mín. 6 caracteres)" autocomplete="current-password" />
+      <button id="btn-login" class="btn primary">Entrar</button>
+      <button id="btn-signup" class="btn ghost">Criar conta</button>
+      <p id="auth-msg" class="auth-msg"></p>
+      <details class="cfg-help">
+        <summary>Ainda não configurou o Supabase?</summary>
+        <p class="muted small">Edite o arquivo <code>config.js</code> com a URL e a chave <code>anon</code> do seu projeto. Veja o <code>README.md</code>.</p>
+      </details>
+    </div>
+  </div>
+
+  <!-- ===== App ===== -->
+  <div id="app-view" class="hidden">
+    <header class="topbar">
+      <div class="brand small"><span class="logo">₿</span><strong>Minhas Finanças</strong></div>
+      <div class="topbar-actions">
+        <span id="user-email" class="muted small"></span>
+        <button id="btn-logout" class="btn tiny ghost">Sair</button>
+      </div>
+    </header>
+
+    <nav class="tabs">
+      <button class="tab active" data-tab="dashboard">Painel</button>
+      <button class="tab" data-tab="transacoes">Lançamentos</button>
+      <button class="tab" data-tab="importar">Importar PDF</button>
+      <button class="tab" data-tab="investimentos">Investimentos</button>
+      <button class="tab" data-tab="config">Config</button>
+    </nav>
+
+    <main class="content">
+      <!-- DASHBOARD -->
+      <section id="tab-dashboard" class="tab-pane active">
+        <div class="filters">
+          <label>De <input type="date" id="dash-de" /></label>
+          <label>Até <input type="date" id="dash-ate" /></label>
+          <button class="btn tiny" id="dash-aplicar">Aplicar</button>
+        </div>
+        <div class="cards">
+          <div class="card kpi"><span class="klabel">Receitas</span><span id="kpi-receita" class="kval pos">R$ 0</span></div>
+          <div class="card kpi"><span class="klabel">Despesas</span><span id="kpi-despesa" class="kval neg">R$ 0</span></div>
+          <div class="card kpi"><span class="klabel">Saldo</span><span id="kpi-saldo" class="kval">R$ 0</span></div>
+          <div class="card kpi"><span class="klabel">Patrimônio investido</span><span id="kpi-invest" class="kval">R$ 0</span></div>
+        </div>
+        <div class="grid2">
+          <div class="card"><h3>Gasto diário no período</h3><canvas id="chart-diario"></canvas></div>
+          <div class="card"><h3>Evolução mensal (12 meses)</h3><canvas id="chart-mensal"></canvas></div>
+          <div class="card"><h3>Despesas por categoria</h3><canvas id="chart-categoria"></canvas></div>
+          <div class="card">
+            <h3>Comparativo entre períodos</h3>
+            <div class="filters small">
+              <label>A: <input type="month" id="cmp-a" /></label>
+              <label>B: <input type="month" id="cmp-b" /></label>
+              <button class="btn tiny" id="cmp-aplicar">Comparar</button>
+            </div>
+            <canvas id="chart-comparativo"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- TRANSACOES -->
+      <section id="tab-transacoes" class="tab-pane">
+        <form id="form-tx" class="card form-inline">
+          <input type="hidden" id="tx-id" />
+          <label>Data<input type="date" id="tx-data" required /></label>
+          <label>Nome / descrição<input type="text" id="tx-desc" placeholder="Ex: Mercado Extra" required /></label>
+          <label>Valor (R$)<input type="number" step="0.01" id="tx-valor" placeholder="150,00" required /></label>
+          <label>Tipo
+            <select id="tx-tipo"><option value="despesa">Despesa</option><option value="receita">Receita</option></select>
+          </label>
+          <label>Categoria<select id="tx-cat"></select></label>
+          <label>Fonte<input type="text" id="tx-fonte" placeholder="Cartão Nubank" /></label>
+          <button class="btn primary" type="submit">Salvar</button>
+        </form>
+        <div class="filters">
+          <input type="search" id="tx-busca" placeholder="Buscar por nome..." />
+          <select id="tx-filtro-cat"><option value="">Todas as categorias</option></select>
+          <select id="tx-filtro-tipo"><option value="">Todos</option><option value="despesa">Despesas</option><option value="receita">Receitas</option></select>
+        </div>
+        <div class="table-wrap"><table id="tx-table">
+          <thead><tr><th>Data</th><th>Nome</th><th>Categoria</th><th>Fonte</th><th class="right">Valor</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </section>
+
+      <!-- IMPORTAR PDF -->
+      <section id="tab-importar" class="tab-pane">
+        <div class="card">
+          <h3>Importar fatura / extrato</h3>
+          <p class="muted small">Aceita <strong>PDF</strong> (fatura de cartão), <strong>CSV</strong> ou <strong>OFX</strong> (extrato do banco). O app extrai as transações, você revisa/edita e confirma antes de salvar. PDFs de imagem (escaneados) não são suportados.</p>
+          <div class="filters">
+            <input type="file" id="pdf-file" accept=".pdf,.csv,.ofx,.qfx,application/pdf,text/csv" />
+            <input type="text" id="pdf-fonte" placeholder="Fonte (ex: Cartão Itaú)" />
+            <label>Ano <input type="number" id="pdf-ano" placeholder="2026" style="width:90px" /></label>
+            <button class="btn primary" id="pdf-processar">Processar</button>
+          </div>
+          <p id="pdf-status" class="muted small"></p>
+        </div>
+        <div id="pdf-review" class="card hidden">
+          <div class="review-head">
+            <h3>Revisar transações encontradas</h3>
+            <div><button class="btn tiny" id="pdf-marcar-todos">Marcar todos</button>
+            <button class="btn primary" id="pdf-salvar">Salvar selecionadas</button></div>
+          </div>
+          <div class="table-wrap"><table id="pdf-table">
+            <thead><tr><th><input type="checkbox" id="pdf-check-all" checked/></th><th>Data</th><th>Nome</th><th>Categoria</th><th class="right">Valor</th></tr></thead>
+            <tbody></tbody>
+          </table></div>
+        </div>
+      </section>
+
+      <!-- INVESTIMENTOS -->
+      <section id="tab-investimentos" class="tab-pane">
+        <form id="form-inv" class="card form-inline">
+          <input type="hidden" id="inv-id" />
+          <label>Corretora<input type="text" id="inv-corretora" placeholder="XP / AUVP / Mercado Pago" required /></label>
+          <label>Ativo<input type="text" id="inv-ativo" placeholder="CDB Banco X / PETR4" required /></label>
+          <label>Classe
+            <select id="inv-classe">
+              <option>Renda Fixa</option><option>Ações</option><option>FIIs</option>
+              <option>Cripto</option><option>Fundos</option><option>Outros</option>
+            </select>
+          </label>
+          <label>Ticker <span class="muted">(p/ cotação)</span><input type="text" id="inv-ticker" placeholder="PETR4 / HGLG11 / bitcoin" /></label>
+          <label>Quantidade<input type="number" step="0.00000001" id="inv-qtd" placeholder="100" /></label>
+          <label>Aplicado (R$)<input type="number" step="0.01" id="inv-aplicado" required /></label>
+          <label>Valor atual (R$)<input type="number" step="0.01" id="inv-atual" required /></label>
+          <label>Data ref.<input type="date" id="inv-data" /></label>
+          <button class="btn primary" type="submit">Salvar</button>
+        </form>
+        <div class="filters">
+          <button class="btn" id="inv-cotacoes">↻ Atualizar cotações</button>
+          <span class="muted small">Atualiza o valor atual de ativos com <em>ticker</em> e <em>quantidade</em>. Ações/FIIs via brapi.dev · Cripto via CoinGecko.</span>
+        </div>
+        <div class="cards">
+          <div class="card kpi"><span class="klabel">Total aplicado</span><span id="inv-kpi-aplicado" class="kval">R$ 0</span></div>
+          <div class="card kpi"><span class="klabel">Valor atual</span><span id="inv-kpi-atual" class="kval">R$ 0</span></div>
+          <div class="card kpi"><span class="klabel">Rentabilidade</span><span id="inv-kpi-rent" class="kval">0%</span></div>
+        </div>
+        <div class="grid2">
+          <div class="card"><h3>Alocação por classe</h3><canvas id="chart-alocacao"></canvas></div>
+          <div class="card"><h3>Por corretora</h3><canvas id="chart-corretora"></canvas></div>
+        </div>
+        <div class="table-wrap"><table id="inv-table">
+          <thead><tr><th>Corretora</th><th>Ativo</th><th>Classe</th><th class="right">Aplicado</th><th class="right">Atual</th><th class="right">Rent.</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </section>
+
+      <!-- CONFIG -->
+      <section id="tab-config" class="tab-pane">
+        <div class="card">
+          <h3>Categorias</h3>
+          <form id="form-cat" class="form-inline">
+            <label>Nome<input type="text" id="cat-nome" required /></label>
+            <label>Tipo<select id="cat-tipo"><option value="despesa">Despesa</option><option value="receita">Receita</option></select></label>
+            <label>Cor<input type="color" id="cat-cor" value="#6366f1" /></label>
+            <button class="btn primary" type="submit">Adicionar</button>
+          </form>
+          <div id="cat-list" class="chips"></div>
+        </div>
+        <div class="card">
+          <h3>Dados</h3>
+          <p class="muted small">Backup dos seus lançamentos e investimentos.</p>
+          <button class="btn" id="btn-export">Exportar JSON</button>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <!-- Bibliotecas (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>
+    if (window.pdfjsLib) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc =
+        "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+    }
+  </script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(()=>{}));
+    }
+  </script>
+</body>
+</html>
