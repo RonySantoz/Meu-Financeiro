@@ -18,6 +18,7 @@
       <p class="muted">Controle de contas, faturas e investimentos.</p>
       <input id="auth-email" type="email" placeholder="seu@email.com" autocomplete="email" />
       <button id="btn-entrar" class="btn primary">Entrar</button>
+      <button class="btn ghost install-btn" onclick="instalarApp()">⬇ Instalar como app no celular</button>
       <p class="muted small">Digite seu e-mail e entre. A sessão fica salva neste aparelho.</p>
       <p id="auth-msg" class="auth-msg"></p>
       <details class="cfg-help">
@@ -33,6 +34,7 @@
       <div class="brand small"><span class="logo">₿</span><strong>Minhas Finanças</strong></div>
       <div class="topbar-actions">
         <span id="user-email" class="muted small"></span>
+        <button class="btn tiny install-btn" onclick="instalarApp()">⬇ Instalar app</button>
         <button id="btn-logout" class="btn tiny ghost">Sair</button>
       </div>
     </header>

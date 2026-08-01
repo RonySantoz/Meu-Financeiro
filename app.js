@@ -26,6 +26,32 @@ let TXS = [];       // transacoes
 let INVS = [];      // investimentos
 const charts = {};  // instancias Chart.js
 
+/* ---------------- Instalar como app (PWA) ---------------- */
+let deferredPrompt = null;
+const jaInstalado = () => window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+function mostrarBotoesInstalar(mostrar) {
+  $$(".install-btn").forEach((b) => b.classList.toggle("hidden", !mostrar));
+}
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault(); deferredPrompt = e;
+  if (!jaInstalado()) mostrarBotoesInstalar(true);
+});
+window.addEventListener("appinstalled", () => { deferredPrompt = null; mostrarBotoesInstalar(false); });
+async function instalarApp() {
+  if (deferredPrompt) {                       // Android / Chrome / Edge
+    deferredPrompt.prompt();
+    try { await deferredPrompt.userChoice; } catch (_) {}
+    deferredPrompt = null; mostrarBotoesInstalar(false);
+    return;
+  }
+  const ua = navigator.userAgent || "";
+  if (/iphone|ipad|ipod/i.test(ua)) {         // iOS Safari não tem prompt
+    alert("No iPhone/iPad: toque no botão Compartilhar (quadrado com seta) na barra do Safari e escolha \"Adicionar à Tela de Início\".");
+  } else {
+    alert("Para instalar: abra o menu do navegador (⋮) e escolha \"Instalar app\" / \"Adicionar à tela inicial\". Se já estiver instalado, o botão some.");
+  }
+}
+
 /* ---------------- Init ---------------- */
 function initSupabase() {
   if (!window.SUPABASE_URL || window.SUPABASE_URL.includes("SEU-PROJETO")) {
@@ -38,6 +64,7 @@ function initSupabase() {
 
 document.addEventListener("DOMContentLoaded", async () => {
   wireUI();
+  if (jaInstalado()) mostrarBotoesInstalar(false);
   $("#auth-view").classList.remove("hidden");
   if (!initSupabase()) return;
   const { data } = await sb.auth.getSession();
