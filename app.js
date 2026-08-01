@@ -265,7 +265,71 @@ async function lerPDF(file) {
     });
     Object.keys(porY).sort((a, b) => b - a).forEach((y) => linhas.push(porY[y].join(" ")));
   }
+  const texto = linhas.join("\n");
+  // extrato de conta (Bradesco) x fatura de cartão
+  if (/PIX (RECEBIDO|ENVIADO)|Saldo \(R\$\)|Hist[oó]rico de Lan/i.test(texto) && /PIX|D[eé]bito/i.test(texto)) {
+    const ex = extrairExtratoBradesco(linhas);
+    if (ex.length) return ex;
+  }
   return extrairTransacoes(linhas, $("#pdf-ano").value);
+}
+
+/* ---- Extrato Bradesco (conta): débito/crédito pela variação de saldo ----
+   Exclui: créditos, auto-transferências (Ronierison), GASTOS CARTAO (já na fatura)
+   e movimentações de investimento (RENTAB/aplicação). */
+function extrairExtratoBradesco(linhas) {
+  const RE_MONEY = /\d{1,3}(?:\.\d{3})*,\d{2}/g;
+  const RE_DOC = /\b\d{6,7}\b/;
+  const temLetras = (s) => /[A-Za-zÁÉÍÓÚÂÊÔÃÕÇ]{3,}/.test(s);
+  const money = (s) => (s.match(RE_MONEY) || []);
+  const isMoneyLine = (s) => RE_MONEY.test(s) && RE_DOC.test(s);
+  const out = [];
+  let prevSaldo = null, curDate = null;
+  for (let i = 0; i < linhas.length; i++) {
+    const ln = linhas[i];
+    if (/[ÚU]ltimos\s+Lan/i.test(ln)) break; // recap final -> encerra
+    const md = ln.match(/(\d{2}\/\d{2}\/\d{4})/);
+    if (md && (ln.trim().startsWith(md[1]) || isMoneyLine(ln))) curDate = md[1];
+    if (!isMoneyLine(ln)) continue;
+    const vals = money(ln);
+    const saldo = parseValorBR(vals[vals.length - 1]);
+    const amount = vals.length >= 2 ? parseValorBR(vals[vals.length - 2]) : 0;
+    if (prevSaldo === null) { prevSaldo = saldo; continue; }
+    const delta = Math.round((saldo - prevSaldo) * 100) / 100;
+    prevSaldo = saldo;
+    if (delta >= 0) continue;               // crédito -> ignora (foco em custos)
+    const val = Math.abs(delta);
+    if (!val) continue;
+    // rótulo: texto próprio antes do docto, senão linha anterior
+    const doc = ln.match(RE_DOC);
+    let proprio = doc ? ln.slice(0, ln.indexOf(doc[0])).replace(/^\s*\d{2}\/\d{2}\/\d{4}/, "").trim() : "";
+    let label = temLetras(proprio) ? proprio : "";
+    if (!label) for (const j of [i - 1, i - 2])
+      if (j >= 0 && temLetras(linhas[j]) && !isMoneyLine(linhas[j]) && !/DES:|REM:/.test(linhas[j])) { label = linhas[j].trim(); break; }
+    // nome: DES:/REM: abaixo, senão linha de descrição abaixo
+    let nome = "";
+    for (const j of [i + 1, i + 2]) {
+      if (j >= linhas.length) break;
+      const m = linhas[j].match(/(?:DES|REM):\s*(.+?)\s*(?:\d{2}\/\d{2})?\s*$/);
+      if (m) { nome = m[1].trim(); break; }
+      if (!nome && temLetras(linhas[j]) && !isMoneyLine(linhas[j]) && !/Saldo/.test(linhas[j]))
+        nome = linhas[j].replace(/\s*\d{2}\/\d{2}\s*$/, "").trim();
+    }
+    const labUp = (label || "").toUpperCase();
+    if (labUp.includes("GASTOS CARTAO")) continue;                 // pagamento de fatura
+    if (/RENTAB|INVEST|APLICAC|RESGATE|FACILCRED/.test(labUp)) continue; // investimento
+    if (/ronierison de jesus/i.test(nome + " " + label)) continue; // auto-transferência
+    const metodo = labUp.includes("PIX") ? "Pix" : "Outros";
+    let desc = (nome || label).replace(/\s*\d{2}\/\d{2}$/, "").trim();
+    if (!desc) desc = label;
+    const [dd, mm, yy] = (curDate || "01/01/2026").split("/");
+    out.push({
+      data: `${yy}-${mm}-${dd}`, descricao: desc.slice(0, 120) || "Lançamento",
+      valor: val, tipo: "despesa", categoria_id: sugerirCategoria(desc),
+      metodo, fonte: "Bradesco Conta", incluir: true,
+    });
+  }
+  return out;
 }
 
 /* ---- CSV ---- */
@@ -403,20 +467,28 @@ function catIdPorNome(nome) {
   const c = CATS.find((x) => x.nome.toLowerCase() === n);
   return c ? c.id : "";
 }
+// Auto-categorização alinhada às categorias do usuário. Ordem = prioridade.
+const REGRAS_CATEGORIA = [
+  ["Agua",        /sabesp|\bagua\b|á?gua|aegea|sanepar|copasa|cedae|embasa|caesb|sabes/],
+  ["Energia",     /neoenergia|elektro|\benel\b|cpfl|cemig|\blight\b|energia|eletropaulo|equatorial|celesc|coelba|energis|edp/],
+  ["Internet",    /claro|vivo|\btim\b|\boi\b|\bnet\b|internet|fibra|telecom|vero|desktop|brisanet|algar/],
+  ["Barbeiro",    /barbe|cabele|sal[aã]o|corte de cabelo|barber/],
+  ["Mercado",     /mercado|super|atacad|carrefour|assa[ií]|rold[aã]o|federzoni|\bdia\b|hortifruti|nagumo|tenda|sonda|\bextra\b|nosso ?v|mesquita|santajulia|trevomix/],
+  ["Alimentacao", /ifood|rappi|ze ?delivery|restaur|lanch|pizza|burger|hamburg| food|a[cç]a[ií]|padar|cafeteria|doceria|nutri ?bem|marmit/],
+  ["Transporte",  /uber|\b99\b|posto|combust|gasolina|ipiranga|shell|petrobras|estacion|metr[oô]|[oô]nibus|passagem|bilhete|ipva|detran|licenc|pneu/],
+  ["Saude",       /farm|drogaria|drogasil|pacheco|\braia\b|hospital|clinic|\bpet\b|pets|\bvet\b|odont|laborat|sa[uú]de|nutri/],
+  ["Educacao",    /escola|col[eé]gio|faculdade|universidade|\bcurso\b|udemy|alura|apostila|livraria|educa|ensino/],
+  ["Lazer",       /cinema|netflix|spotify|disney|\bhbo\b|prime video|youtube|\bshow\b|ingresso|viagem|hotel|\bgame\b|steam|xbox|playstation|lazer/],
+  ["Compras",     /amazon|mercado ?livre|shopee|magalu|magazine|aliexpress|americanas|renner|riachuelo|shein|natura|boticario|\bloja\b|casas bahia|centauro|enjoei|esplanada ?movei/],
+  ["Moradia",     /aluguel|condominio|imobili|im[oó]vei|latorre|iptu|reforma|constru|moradia/],
+];
 function sugerirCategoria(desc) {
-  const d = desc.toLowerCase();
-  const map = [
-    ["Alimentacao", /merc|super|padar|restaur|ifood|rappi|lanch|food|burger|pizza/],
-    ["Transporte", /uber|99|posto|combust|gasolina|estacion|metro|onibus/],
-    ["Assinaturas", /netflix|spotify|amazon prime|disney|hbo|youtube|assinatura/],
-    ["Saude", /farm|drogaria|hospital|clinic|saude|academia/],
-    ["Moradia", /aluguel|condominio|luz|energia|agua|gas|internet|vivo|claro|tim/],
-    ["Lazer", /cinema|bar|show|viagem|hotel|game/],
-  ];
-  for (const [nome, re] of map) {
-    if (re.test(d)) { const c = CATS.find((x) => x.nome === nome); if (c) return c.id; }
+  const d = (desc || "").toLowerCase();
+  for (const [nome, re] of REGRAS_CATEGORIA) {
+    if (re.test(d)) { const c = CATS.find((x) => x.nome.toLowerCase() === nome.toLowerCase()); if (c) return c.id; }
   }
-  return "";
+  const outros = CATS.find((x) => x.nome.toLowerCase() === "outros");
+  return outros ? outros.id : "";
 }
 function renderPDFReview() {
   $("#pdf-review").classList.toggle("hidden", !PDF_ITENS.length);
