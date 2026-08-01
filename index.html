@@ -48,32 +48,61 @@
     <main class="content">
       <!-- DASHBOARD -->
       <section id="tab-dashboard" class="tab-pane active">
-        <div class="filters">
-          <label>De <input type="date" id="dash-de" /></label>
-          <label>Até <input type="date" id="dash-ate" /></label>
-          <button class="btn tiny" id="dash-aplicar">Aplicar</button>
+        <div class="month-nav">
+          <button class="mnav-btn" id="mes-prev" aria-label="Mês anterior">‹</button>
+          <div class="mnav-center">
+            <span class="mnav-label" id="mes-label">—</span>
+            <button class="mnav-hoje" id="mes-hoje">hoje</button>
+          </div>
+          <button class="mnav-btn" id="mes-next" aria-label="Próximo mês">›</button>
         </div>
-        <div class="cards">
-          <div class="card kpi"><span class="klabel">Receitas</span><span id="kpi-receita" class="kval pos">R$ 0</span></div>
-          <div class="card kpi"><span class="klabel">Despesas</span><span id="kpi-despesa" class="kval neg">R$ 0</span></div>
-          <div class="card kpi"><span class="klabel">Saldo</span><span id="kpi-saldo" class="kval">R$ 0</span></div>
-          <div class="card kpi"><span class="klabel">Patrimônio investido</span><span id="kpi-invest" class="kval">R$ 0</span></div>
+
+        <div class="cards kpis">
+          <div class="card kpi">
+            <span class="klabel">Despesas do mês</span>
+            <span id="kpi-despesa" class="kval neg">R$ 0</span>
+            <span id="kpi-despesa-var" class="kvar"></span>
+          </div>
+          <div class="card kpi">
+            <span class="klabel">Receitas</span>
+            <span id="kpi-receita" class="kval pos">R$ 0</span>
+            <span id="kpi-receita-var" class="kvar"></span>
+          </div>
+          <div class="card kpi">
+            <span class="klabel">Saldo do mês</span>
+            <span id="kpi-saldo" class="kval">R$ 0</span>
+            <span class="kvar muted" id="kpi-media">média/dia —</span>
+          </div>
+          <div class="card kpi">
+            <span class="klabel">Investido</span>
+            <span id="kpi-invest" class="kval">R$ 0</span>
+            <span class="kvar muted">patrimônio</span>
+          </div>
         </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h3>Gastos por categoria</h3>
+            <span class="muted small" id="cat-total-label"></span>
+          </div>
+          <div id="cat-breakdown" class="cat-breakdown"></div>
+        </div>
+
         <div class="grid2">
-          <div class="card"><h3>Gasto diário no período</h3><canvas id="chart-diario"></canvas></div>
           <div class="card"><h3>Evolução mensal (12 meses)</h3><canvas id="chart-mensal"></canvas></div>
-          <div class="card"><h3>Despesas por categoria</h3><canvas id="chart-categoria"></canvas></div>
-          <div class="card"><h3>Despesas por método</h3><canvas id="chart-metodo"></canvas></div>
+          <div class="card"><h3>Gasto por dia no mês</h3><canvas id="chart-diario"></canvas></div>
+          <div class="card"><h3>Por método de pagamento</h3><canvas id="chart-metodo"></canvas></div>
           <div class="card">
-            <h3>Comparativo entre períodos</h3>
+            <h3>Comparar dois meses</h3>
             <div class="filters small">
-              <label>A: <input type="month" id="cmp-a" /></label>
-              <label>B: <input type="month" id="cmp-b" /></label>
+              <label>A <input type="month" id="cmp-a" /></label>
+              <label>B <input type="month" id="cmp-b" /></label>
               <button class="btn tiny" id="cmp-aplicar">Comparar</button>
             </div>
             <canvas id="chart-comparativo"></canvas>
           </div>
         </div>
+        <canvas id="chart-categoria" class="hidden"></canvas>
       </section>
 
       <!-- TRANSACOES -->

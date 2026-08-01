@@ -97,9 +97,7 @@ async function enterApp() {
   // datas padrao
   $("#tx-data").value = todayISO();
   $("#inv-data").value = todayISO();
-  const first = new Date(); first.setDate(1);
-  $("#dash-de").value = first.toISOString().slice(0, 10);
-  $("#dash-ate").value = todayISO();
+  MES_SEL = monthISO();
   const prev = new Date(); prev.setMonth(prev.getMonth() - 1);
   $("#cmp-a").value = monthISO(prev);
   $("#cmp-b").value = monthISO();
@@ -688,70 +686,107 @@ function txNoPeriodo(de, ate) {
   return TXS.filter((t) => t.data >= de && t.data <= ate);
 }
 
+let MES_SEL = monthISO();                    // mês selecionado (YYYY-MM)
+function mesAnterior(m) { const d = new Date(m + "-01T00:00:00"); d.setMonth(d.getMonth() - 1); return monthISO(d); }
+function mesSeguinte(m) { const d = new Date(m + "-01T00:00:00"); d.setMonth(d.getMonth() + 1); return monthISO(d); }
+function diasNoMes(m) { const [y, mm] = m.split("-").map(Number); return new Date(y, mm, 0).getDate(); }
+const MESES_LONGO = ["", "Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+function fmtMesLongo(m) { const [y, mm] = m.split("-"); return `${MESES_LONGO[+mm]} ${y}`; }
+function mudarMes(delta) { MES_SEL = delta < 0 ? mesAnterior(MES_SEL) : mesSeguinte(MES_SEL); renderDashboard(); }
+
+function setVar(sel, atual, anterior, aumentoRuim) {
+  const el = $(sel); if (!el) return;
+  if (!anterior) { el.textContent = ""; return; }
+  const p = ((atual - anterior) / anterior) * 100;
+  const up = p >= 0;
+  const bom = aumentoRuim ? !up : up;
+  el.textContent = (up ? "▲" : "▼") + " " + Math.abs(p).toFixed(0) + "% vs mês anterior";
+  el.className = "kvar " + (bom ? "pos" : "neg");
+}
+
 function renderDashboard() {
-  const de = $("#dash-de").value || "2000-01-01";
-  const ate = $("#dash-ate").value || todayISO();
-  const periodo = txNoPeriodo(de, ate);
-  const receita = periodo.filter((t) => t.tipo === "receita").reduce((s, t) => s + Math.abs(t.valor), 0);
-  const despesa = periodo.filter((t) => t.tipo === "despesa").reduce((s, t) => s + Math.abs(t.valor), 0);
-  $("#kpi-receita").textContent = brl(receita);
+  const m = MES_SEL;
+  $("#mes-label").textContent = fmtMesLongo(m);
+  const doMes = TXS.filter((t) => t.data.startsWith(m));
+  const despesa = doMes.filter((t) => t.tipo === "despesa").reduce((s, t) => s + Math.abs(t.valor), 0);
+  const receita = doMes.filter((t) => t.tipo === "receita").reduce((s, t) => s + Math.abs(t.valor), 0);
+  const mAnt = mesAnterior(m);
+  const despAnt = TXS.filter((t) => t.data.startsWith(mAnt) && t.tipo === "despesa").reduce((s, t) => s + Math.abs(t.valor), 0);
+  const recAnt = TXS.filter((t) => t.data.startsWith(mAnt) && t.tipo === "receita").reduce((s, t) => s + Math.abs(t.valor), 0);
   $("#kpi-despesa").textContent = brl(despesa);
+  $("#kpi-receita").textContent = brl(receita);
   $("#kpi-saldo").textContent = brl(receita - despesa);
   $("#kpi-saldo").className = "kval " + (receita - despesa >= 0 ? "pos" : "neg");
+  setVar("#kpi-despesa-var", despesa, despAnt, true);
+  setVar("#kpi-receita-var", receita, recAnt, false);
+  $("#kpi-media").textContent = "média " + brl(despesa / diasNoMes(m)) + "/dia";
 
-  // ---- Diário (despesas por dia no período) ----
-  const porDia = {};
-  periodo.filter((t) => t.tipo === "despesa").forEach((t) => {
-    porDia[t.data] = (porDia[t.data] || 0) + Math.abs(t.valor);
-  });
-  const dias = Object.keys(porDia).sort();
-  mkChart("chart-diario", {
-    type: "bar",
-    data: { labels: dias.map(fmtData), datasets: [{ label: "Despesa", data: dias.map((d) => porDia[d]), backgroundColor: "#6366f1" }] },
-    options: baseOpts(),
-  });
+  renderCatBreakdown(doMes, despesa);
 
-  // ---- Mensal (12 meses: receita x despesa) ----
-  const meses = ultimosMeses(12);
-  const rec = meses.map((m) => TXS.filter((t) => t.data.startsWith(m) && t.tipo === "receita").reduce((s, t) => s + Math.abs(t.valor), 0));
-  const desp = meses.map((m) => TXS.filter((t) => t.data.startsWith(m) && t.tipo === "despesa").reduce((s, t) => s + Math.abs(t.valor), 0));
+  // ---- Evolução mensal: 12 meses até o mês selecionado ----
+  const meses = []; let cur = m;
+  for (let i = 0; i < 12; i++) { meses.unshift(cur); cur = mesAnterior(cur); }
+  const desp = meses.map((mm) => TXS.filter((t) => t.data.startsWith(mm) && t.tipo === "despesa").reduce((s, t) => s + Math.abs(t.valor), 0));
+  const rec = meses.map((mm) => TXS.filter((t) => t.data.startsWith(mm) && t.tipo === "receita").reduce((s, t) => s + Math.abs(t.valor), 0));
   mkChart("chart-mensal", {
-    type: "line",
+    type: "bar",
     data: { labels: meses.map(fmtMes), datasets: [
-      { label: "Receitas", data: rec, borderColor: "#22c55e", backgroundColor: "#22c55e33", tension: .3, fill: true },
-      { label: "Despesas", data: desp, borderColor: "#ef4444", backgroundColor: "#ef444433", tension: .3, fill: true },
+      { label: "Despesas", data: desp, backgroundColor: meses.map((mm) => mm === m ? "#ef4444" : "#ef444488"), order: 2 },
+      { label: "Receitas", type: "line", data: rec, borderColor: "#22c55e", backgroundColor: "#22c55e33", tension: .3, order: 1 },
     ] }, options: baseOpts(true),
   });
 
-  // ---- Por categoria (pizza) ----
-  const porCat = {};
-  periodo.filter((t) => t.tipo === "despesa").forEach((t) => {
-    const c = catById(t.categoria_id); const nome = c ? c.nome : "Sem categoria";
-    porCat[nome] = (porCat[nome] || 0) + Math.abs(t.valor);
-  });
-  const catNomes = Object.keys(porCat);
-  mkChart("chart-categoria", {
-    type: "doughnut",
-    data: { labels: catNomes, datasets: [{ data: catNomes.map((n) => porCat[n]),
-      backgroundColor: catNomes.map((n, i) => { const c = CATS.find((x) => x.nome === n); return c ? c.cor : PALETA[i % PALETA.length]; }) }] },
-    options: { plugins: { legend: { position: "right" } } },
+  // ---- Gasto por dia no mês ----
+  const porDia = {};
+  doMes.filter((t) => t.tipo === "despesa").forEach((t) => { porDia[t.data] = (porDia[t.data] || 0) + Math.abs(t.valor); });
+  const dias = []; for (let d = 1; d <= diasNoMes(m); d++) dias.push(`${m}-${String(d).padStart(2, "0")}`);
+  mkChart("chart-diario", {
+    type: "bar",
+    data: { labels: dias.map((d) => d.slice(8)), datasets: [{ label: "Despesa", data: dias.map((d) => porDia[d] || 0), backgroundColor: "#6366f1" }] },
+    options: baseOpts(),
   });
 
-  // ---- Por método de pagamento ----
+  // ---- Por método ----
   const porMet = {};
-  periodo.filter((t) => t.tipo === "despesa").forEach((t) => {
-    const m = t.metodo || "Outros";
-    porMet[m] = (porMet[m] || 0) + Math.abs(t.valor);
-  });
+  doMes.filter((t) => t.tipo === "despesa").forEach((t) => { const k = t.metodo || "Outros"; porMet[k] = (porMet[k] || 0) + Math.abs(t.valor); });
   const metNomes = Object.keys(porMet);
   mkChart("chart-metodo", {
     type: "doughnut",
-    data: { labels: metNomes, datasets: [{ data: metNomes.map((m) => porMet[m]),
-      backgroundColor: metNomes.map((_, i) => PALETA[i % PALETA.length]) }] },
+    data: { labels: metNomes, datasets: [{ data: metNomes.map((k) => porMet[k]), backgroundColor: metNomes.map((_, i) => PALETA[i % PALETA.length]) }] },
     options: { plugins: { legend: { position: "right" } } },
   });
 
   renderComparativo();
+}
+
+function nomeCat(t) { const c = catById(t.categoria_id); return c ? c.nome : "Sem categoria"; }
+function renderCatBreakdown(doMes, totalDesp) {
+  const porCat = {};
+  doMes.filter((t) => t.tipo === "despesa").forEach((t) => { const n = nomeCat(t); porCat[n] = (porCat[n] || 0) + Math.abs(t.valor); });
+  const nomes = Object.keys(porCat).sort((a, b) => porCat[b] - porCat[a]);
+  $("#cat-total-label").textContent = totalDesp ? brl(totalDesp) : "";
+  if (!nomes.length) { $("#cat-breakdown").innerHTML = `<span class="muted small">Sem despesas neste mês.</span>`; return; }
+  $("#cat-breakdown").innerHTML = nomes.map((n) => {
+    const c = CATS.find((x) => x.nome === n); const cor = c ? c.cor : "#64748b";
+    const pct = totalDesp ? (porCat[n] / totalDesp * 100) : 0;
+    return `<div class="cat-row" data-catrow="${esc(n)}">
+      <div class="cat-row-top">
+        <span class="cat-name"><span class="dot" style="background:${cor}"></span>${esc(n)}</span>
+        <span class="cat-val">${brl(porCat[n])} <span class="muted small">${pct.toFixed(0)}%</span></span>
+      </div>
+      <div class="cat-bar"><div class="cat-bar-fill" style="width:${pct}%;background:${cor}"></div></div>
+      <div class="cat-tx hidden" data-cattx="${esc(n)}"></div>
+    </div>`;
+  }).join("");
+}
+function toggleCatTx(nome) {
+  const box = $(`.cat-tx[data-cattx="${CSS.escape(nome)}"]`); if (!box) return;
+  if (!box.classList.contains("hidden")) { box.classList.add("hidden"); return; }
+  const rows = TXS.filter((t) => t.data.startsWith(MES_SEL) && t.tipo === "despesa" && nomeCat(t) === nome)
+    .sort((a, b) => b.data.localeCompare(a.data) || Math.abs(b.valor) - Math.abs(a.valor));
+  box.innerHTML = rows.map((t) =>
+    `<div class="cat-tx-row"><span>${fmtData(t.data)} · ${esc(t.descricao)}</span><span>${brl(Math.abs(t.valor))}</span></div>`).join("");
+  box.classList.remove("hidden");
 }
 function renderComparativo() {
   const a = $("#cmp-a").value, b = $("#cmp-b").value;
@@ -839,7 +874,9 @@ function wireUI() {
     $(s).addEventListener("input", renderTxTable));
 
   // dashboard
-  $("#dash-aplicar").addEventListener("click", renderDashboard);
+  $("#mes-prev").addEventListener("click", () => mudarMes(-1));
+  $("#mes-next").addEventListener("click", () => mudarMes(1));
+  $("#mes-hoje").addEventListener("click", () => { MES_SEL = monthISO(); renderDashboard(); });
   $("#cmp-aplicar").addEventListener("click", renderComparativo);
 
   // pdf
@@ -863,6 +900,8 @@ function wireUI() {
     if (t.dataset.delinv) delInv(t.dataset.delinv);
     if (t.dataset.editinv) editInv(t.dataset.editinv);
     if (t.dataset.delcat) delCategoria(t.dataset.delcat);
+    const row = t.closest && t.closest(".cat-row");
+    if (row && row.dataset.catrow) toggleCatTx(row.dataset.catrow);
   });
   // edição inline da revisão de PDF
   document.body.addEventListener("input", (e) => {
