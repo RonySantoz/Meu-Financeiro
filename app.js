@@ -323,8 +323,18 @@ function extrairExtratoBradesco(linhas) {
     let desc = (nome || label).replace(/\s*\d{2}\/\d{2}$/, "").trim();
     if (!desc) desc = label;
     const [dd, mm, yy] = (curDate || "01/01/2026").split("/");
+    const dataISO = `${yy}-${mm}-${dd}`;
+    const dl = desc.toLowerCase();
+    if ((/[aá]gua/.test(dl)) && /energia/.test(dl) && val > 100) {
+      // conta combinada água+energia -> separa Água (100) + Luz (resto)
+      const catAgua = (CATS.find((x) => x.nome.toLowerCase() === "agua") || {}).id || "";
+      const catLuz = (CATS.find((x) => x.nome.toLowerCase() === "energia") || {}).id || "";
+      out.push({ data: dataISO, descricao: "Agua (conta combinada)", valor: 100, tipo: "despesa", categoria_id: catAgua, metodo, fonte: "Bradesco Conta", incluir: true });
+      out.push({ data: dataISO, descricao: "Luz/Energia (conta combinada)", valor: Math.round((val - 100) * 100) / 100, tipo: "despesa", categoria_id: catLuz, metodo, fonte: "Bradesco Conta", incluir: true });
+      continue;
+    }
     out.push({
-      data: `${yy}-${mm}-${dd}`, descricao: desc.slice(0, 120) || "Lançamento",
+      data: dataISO, descricao: desc.slice(0, 120) || "Lançamento",
       valor: val, tipo: "despesa", categoria_id: sugerirCategoria(desc),
       metodo, fonte: "Bradesco Conta", incluir: true,
     });
@@ -482,12 +492,18 @@ const REGRAS_CATEGORIA = [
   ["Compras",     /amazon|mercado ?livre|shopee|magalu|magazine|aliexpress|americanas|renner|riachuelo|shein|natura|boticario|\bloja\b|casas bahia|centauro|enjoei|esplanada ?movei/],
   ["Moradia",     /aluguel|condominio|imobili|im[oó]vei|latorre|iptu|reforma|constru|moradia/],
 ];
+function catPorNome(nome) {
+  const n = nome.toLowerCase();
+  return CATS.find((x) => x.nome.toLowerCase() === n);
+}
 function sugerirCategoria(desc) {
   const d = (desc || "").toLowerCase();
+  // combinado: água E energia na mesma cobrança -> "Agua/Energia"
+  if (/[aá]gua/.test(d) && /energia/.test(d)) { const c = catPorNome("Agua/Energia"); if (c) return c.id; }
   for (const [nome, re] of REGRAS_CATEGORIA) {
-    if (re.test(d)) { const c = CATS.find((x) => x.nome.toLowerCase() === nome.toLowerCase()); if (c) return c.id; }
+    if (re.test(d)) { const c = catPorNome(nome); if (c) return c.id; }
   }
-  const outros = CATS.find((x) => x.nome.toLowerCase() === "outros");
+  const outros = catPorNome("Outros");
   return outros ? outros.id : "";
 }
 function renderPDFReview() {
