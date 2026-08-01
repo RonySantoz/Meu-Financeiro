@@ -160,9 +160,11 @@ function renderTxTable() {
   const q = ($("#tx-busca").value || "").toLowerCase();
   const fc = $("#tx-filtro-cat").value;
   const ft = $("#tx-filtro-tipo").value;
+  const fm = $("#tx-filtro-metodo").value;
   const rows = TXS.filter((t) =>
     (!q || t.descricao.toLowerCase().includes(q)) &&
     (!fc || t.categoria_id === fc) &&
+    (!fm || (t.metodo || "") === fm) &&
     (!ft || t.tipo === ft)
   );
   $("#tx-table tbody").innerHTML = rows.map((t) => {
@@ -173,13 +175,14 @@ function renderTxTable() {
       <td>${fmtData(t.data)}</td>
       <td>${esc(t.descricao)}</td>
       <td><span class="badge" style="background:${cor}">${c ? esc(c.nome) : "—"}</span></td>
+      <td class="muted small">${esc(t.metodo || "")}</td>
       <td class="muted">${esc(t.fonte || "")}</td>
       <td class="right ${cls}">${brl(t.tipo === "receita" ? Math.abs(t.valor) : -Math.abs(t.valor))}</td>
       <td class="right">
         <button class="link-btn" data-edittx="${t.id}">✎</button>
         <button class="link-btn danger" data-deltx="${t.id}">✕</button>
       </td></tr>`;
-  }).join("") || `<tr><td colspan="6" class="muted">Nenhum lançamento.</td></tr>`;
+  }).join("") || `<tr><td colspan="7" class="muted">Nenhum lançamento.</td></tr>`;
 }
 async function saveTx(e) {
   e.preventDefault();
@@ -193,6 +196,7 @@ async function saveTx(e) {
     tipo,
     valor: tipo === "receita" ? valorAbs : -valorAbs,
     categoria_id: $("#tx-cat").value || null,
+    metodo: $("#tx-metodo").value,
     fonte: $("#tx-fonte").value.trim() || null,
     origem: "manual",
   };
@@ -208,6 +212,7 @@ function editTx(id) {
   $("#tx-id").value = t.id; $("#tx-data").value = t.data;
   $("#tx-desc").value = t.descricao; $("#tx-valor").value = Math.abs(t.valor);
   $("#tx-tipo").value = t.tipo; $("#tx-cat").value = t.categoria_id || "";
+  $("#tx-metodo").value = t.metodo || "Cartão";
   $("#tx-fonte").value = t.fonte || "";
   $("#tab-transacoes").scrollIntoView({ behavior: "smooth" });
 }
@@ -311,8 +316,19 @@ function extrairCSV(texto) {
     const valor = parseValorBR(cols[iVal]);
     if (!data || !isFinite(valor) || valor === 0) continue;
     const desc = (cols[iDesc] || "Transação").slice(0, 120);
-    const tipo = valor >= 0 ? "receita" : "despesa";
-    out.push({ data, descricao: desc, valor: Math.abs(valor), tipo, categoria_id: sugerirCategoria(desc), incluir: true });
+    // colunas opcionais: Tipo, Categoria, Metodo, Fonte
+    const iTipo = header.findIndex((h) => /^tipo/.test(h));
+    const iCat  = header.findIndex((h) => /categoria/.test(h));
+    const iMet  = header.findIndex((h) => /m[eé]todo|metodo/.test(h));
+    const iFon  = header.findIndex((h) => /fonte|cart[aã]o|conta/.test(h));
+    let tipo = valor >= 0 ? "receita" : "despesa";
+    if (iTipo >= 0 && cols[iTipo]) tipo = /rec/i.test(cols[iTipo]) ? "receita" : "despesa";
+    const catNome = iCat >= 0 && cols[iCat] ? cols[iCat].trim() : "";
+    const catId = catNome ? catIdPorNome(catNome) : sugerirCategoria(desc);
+    const metodo = iMet >= 0 && cols[iMet] ? cols[iMet].trim() : sugerirMetodo(desc);
+    const fonte = iFon >= 0 && cols[iFon] ? cols[iFon].trim() : null;
+    out.push({ data, descricao: desc, valor: Math.abs(valor), tipo,
+      categoria_id: catId, categoriaNome: catNome, metodo, fonte, incluir: tipo === "despesa" });
   }
   return out;
 }
@@ -330,7 +346,11 @@ function extrairOFX(texto) {
     if (!isFinite(valor) || valor === 0) continue;
     const desc = (tag(b, "MEMO") || tag(b, "NAME") || "Transação").slice(0, 120);
     const tipo = valor >= 0 ? "receita" : "despesa";
-    out.push({ data, descricao: desc, valor: Math.abs(valor), tipo, categoria_id: sugerirCategoria(desc), incluir: true });
+    const trntype = tag(b, "TRNTYPE").toUpperCase();
+    let metodo = sugerirMetodo(desc);
+    if (/XFER|DEP|DIRECTDEP|PAYMENT/.test(trntype)) metodo = "Transferencia";
+    out.push({ data, descricao: desc, valor: Math.abs(valor), tipo,
+      categoria_id: sugerirCategoria(desc), metodo, incluir: tipo === "despesa" });
   }
   return out;
 }
@@ -365,9 +385,23 @@ function extrairTransacoes(linhas, anoFallback) {
     if (desc.length < 2) desc = "Transação";
     // pagamentos/estornos com "-" viram receita; senão despesa (fatura de cartão)
     const tipo = neg ? "receita" : "despesa";
-    out.push({ data, descricao: desc.slice(0, 120), valor, tipo, categoria_id: sugerirCategoria(desc), incluir: true });
+    // objetivo do app = custos: créditos entram desmarcados por padrão
+    out.push({ data, descricao: desc.slice(0, 120), valor, tipo,
+      categoria_id: sugerirCategoria(desc), metodo: sugerirMetodo(desc), incluir: tipo === "despesa" });
   }
   return out;
+}
+function sugerirMetodo(desc) {
+  const d = (desc || "").toLowerCase();
+  if (/pix|ted|doc |transfer/.test(d)) return "Pix";
+  if (/saque|anuidade|tarifa|iof|juros|encargo|mora|multa|seguro|tribut|boleto/.test(d)) return "Outros";
+  return "Cartão";
+}
+function catIdPorNome(nome) {
+  if (!nome) return "";
+  const n = nome.trim().toLowerCase();
+  const c = CATS.find((x) => x.nome.toLowerCase() === n);
+  return c ? c.id : "";
 }
 function sugerirCategoria(desc) {
   const d = desc.toLowerCase();
@@ -388,23 +422,41 @@ function renderPDFReview() {
   $("#pdf-review").classList.toggle("hidden", !PDF_ITENS.length);
   const optCat = (sel) => `<option value="">—</option>` +
     CATS.map((c) => `<option value="${c.id}" ${c.id === sel ? "selected" : ""}>${c.nome}</option>`).join("");
+  const optMet = (sel) => ["Cartão", "Pix", "VA", "Outros"]
+    .map((m) => `<option ${m === sel ? "selected" : ""}>${m}</option>`).join("");
   $("#pdf-table tbody").innerHTML = PDF_ITENS.map((t, i) => `
     <tr>
       <td><input type="checkbox" data-pdfchk="${i}" ${t.incluir ? "checked" : ""}></td>
       <td><input type="date" value="${t.data}" data-pdfdata="${i}" style="width:140px"></td>
       <td><input type="text" value="${esc(t.descricao)}" data-pdfdesc="${i}" style="width:100%"></td>
       <td><select data-pdfcat="${i}">${optCat(t.categoria_id)}</select></td>
+      <td><select data-pdfmet="${i}">${optMet(t.metodo || "Cartao de credito")}</select></td>
       <td class="right ${t.tipo === "receita" ? "pos" : "neg"}">
         <input type="number" step="0.01" value="${t.valor}" data-pdfval="${i}" style="width:110px;text-align:right">
+        <span class="muted small">${t.tipo === "receita" ? "crédito" : ""}</span>
       </td>
     </tr>`).join("");
 }
 async function salvarPDF() {
-  const fonte = $("#pdf-fonte").value.trim() || null;
+  const fonteInput = $("#pdf-fonte").value.trim() || null;
+  // cria categorias que vieram no arquivo mas ainda não existem (ex.: "Mercado")
+  const faltantes = [...new Set(PDF_ITENS
+    .filter((t) => t.incluir && t.categoriaNome && !catIdPorNome(t.categoriaNome))
+    .map((t) => t.categoriaNome))];
+  if (faltantes.length) {
+    const paleta = ["#6366f1","#22d3ee","#f59e0b","#ef4444","#10b981","#8b5cf6","#ec4899","#84cc16"];
+    await sb.from("categorias").insert(faltantes.map((nome, i) => ({
+      user_id: USER.id, nome, tipo: "despesa", cor: paleta[i % paleta.length],
+    })));
+    await loadCategorias();
+  }
+  // resolve categoria_id pelos nomes (agora que as categorias existem)
+  PDF_ITENS.forEach((t) => { if (t.categoriaNome && !t.categoria_id) t.categoria_id = catIdPorNome(t.categoriaNome); });
   const registros = PDF_ITENS.filter((t) => t.incluir).map((t) => ({
     user_id: USER.id, data: t.data, descricao: t.descricao, tipo: t.tipo,
     valor: t.tipo === "receita" ? Math.abs(t.valor) : -Math.abs(t.valor),
-    categoria_id: t.categoria_id || null, origem: "pdf", fonte,
+    categoria_id: t.categoria_id || null, metodo: t.metodo || "Cartão",
+    origem: "import", fonte: t.fonte || fonteInput,
   }));
   if (!registros.length) return toast("Nenhuma transação selecionada");
   const { error } = await sb.from("transacoes").insert(registros);
@@ -596,6 +648,20 @@ function renderDashboard() {
     options: { plugins: { legend: { position: "right" } } },
   });
 
+  // ---- Por método de pagamento ----
+  const porMet = {};
+  periodo.filter((t) => t.tipo === "despesa").forEach((t) => {
+    const m = t.metodo || "Outros";
+    porMet[m] = (porMet[m] || 0) + Math.abs(t.valor);
+  });
+  const metNomes = Object.keys(porMet);
+  mkChart("chart-metodo", {
+    type: "doughnut",
+    data: { labels: metNomes, datasets: [{ data: metNomes.map((m) => porMet[m]),
+      backgroundColor: metNomes.map((_, i) => PALETA[i % PALETA.length]) }] },
+    options: { plugins: { legend: { position: "right" } } },
+  });
+
   renderComparativo();
 }
 function renderComparativo() {
@@ -680,7 +746,7 @@ function wireUI() {
   $("#form-cat").addEventListener("submit", addCategoria);
 
   // filtros transacoes
-  ["#tx-busca", "#tx-filtro-cat", "#tx-filtro-tipo"].forEach((s) =>
+  ["#tx-busca", "#tx-filtro-cat", "#tx-filtro-tipo", "#tx-filtro-metodo"].forEach((s) =>
     $(s).addEventListener("input", renderTxTable));
 
   // dashboard
@@ -716,6 +782,7 @@ function wireUI() {
     if (i.pdfdata !== undefined) PDF_ITENS[+i.pdfdata].data = t.value;
     if (i.pdfdesc !== undefined) PDF_ITENS[+i.pdfdesc].descricao = t.value;
     if (i.pdfcat !== undefined) PDF_ITENS[+i.pdfcat].categoria_id = t.value;
+    if (i.pdfmet !== undefined) PDF_ITENS[+i.pdfmet].metodo = t.value;
     if (i.pdfval !== undefined) { PDF_ITENS[+i.pdfval].valor = parseFloat(t.value) || 0; }
   });
 }

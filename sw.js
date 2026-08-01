@@ -1,5 +1,5 @@
 // Service worker simples: cache do app shell para funcionar offline / instalar como app.
-const CACHE = "financas-v1";
+const CACHE = "financas-v2";
 const ASSETS = [
   "./", "./index.html", "./style.css", "./app.js", "./config.js",
   "./manifest.webmanifest", "./icons/icon.svg"

@@ -63,6 +63,7 @@
           <div class="card"><h3>Gasto diário no período</h3><canvas id="chart-diario"></canvas></div>
           <div class="card"><h3>Evolução mensal (12 meses)</h3><canvas id="chart-mensal"></canvas></div>
           <div class="card"><h3>Despesas por categoria</h3><canvas id="chart-categoria"></canvas></div>
+          <div class="card"><h3>Despesas por método</h3><canvas id="chart-metodo"></canvas></div>
           <div class="card">
             <h3>Comparativo entre períodos</h3>
             <div class="filters small">
@@ -86,16 +87,22 @@
             <select id="tx-tipo"><option value="despesa">Despesa</option><option value="receita">Receita</option></select>
           </label>
           <label>Categoria<select id="tx-cat"></select></label>
+          <label>Método
+            <select id="tx-metodo">
+              <option>Cartão</option><option>Pix</option><option>VA</option><option>Outros</option>
+            </select>
+          </label>
           <label>Fonte<input type="text" id="tx-fonte" placeholder="Cartão Nubank" /></label>
           <button class="btn primary" type="submit">Salvar</button>
         </form>
         <div class="filters">
           <input type="search" id="tx-busca" placeholder="Buscar por nome..." />
           <select id="tx-filtro-cat"><option value="">Todas as categorias</option></select>
+          <select id="tx-filtro-metodo"><option value="">Todos os métodos</option><option>Cartão</option><option>Pix</option><option>VA</option><option>Outros</option></select>
           <select id="tx-filtro-tipo"><option value="">Todos</option><option value="despesa">Despesas</option><option value="receita">Receitas</option></select>
         </div>
         <div class="table-wrap"><table id="tx-table">
-          <thead><tr><th>Data</th><th>Nome</th><th>Categoria</th><th>Fonte</th><th class="right">Valor</th><th></th></tr></thead>
+          <thead><tr><th>Data</th><th>Nome</th><th>Categoria</th><th>Método</th><th>Fonte</th><th class="right">Valor</th><th></th></tr></thead>
           <tbody></tbody>
         </table></div>
       </section>
